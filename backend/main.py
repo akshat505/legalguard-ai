@@ -23,8 +23,9 @@ from analyzer import analyze_document, llm_available
 load_dotenv()
 
 # ---- Tesseract path (Windows) ----
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
+import platform
+if platform.system() == "Windows":
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 # ---- MongoDB setup (cloud Atlas or local fallback) ----
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
