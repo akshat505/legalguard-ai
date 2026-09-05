@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LegalGuard AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>⚖️ LegalGuard AI</h1>
+  <p>Upload an agreement and get a clause-by-clause red-flag report — in English or Hindi.</p>
+</header>
+
+<div class="container">
+
+  <div class="top-tabs">
+    <button class="top-tab-btn active" id="view-analyze">Analyze Document</button>
+    <button class="top-tab-btn" id="view-history">History</button>
+  </div>
+
+  <div id="analyze-view">
+
+    <div class="card" id="upload-card">
+      <div class="tabs">
+        <button class="tab-btn active" id="tab-file">Upload File</button>
+        <button class="tab-btn" id="tab-text">Paste Text</button>
+      </div>
+
+      <div class="lang-row">
+        <label for="lang-select">🌐 Explanation language:</label>
+        <select id="lang-select">
+          <option value="English" selected>English</option>
+          <option value="Hindi">हिंदी (Hindi)</option>
+        </select>
+        <span style="font-size:12px;">— works no matter what language your document is in</span>
+      </div>
+
+      <div id="file-panel">
+        <div id="drop-zone">
+          <p><strong>Click to upload</strong> or drag & drop a PDF / TXT / Image file here</p>
+          <input type="file" id="file-input" accept=".pdf,.txt,.png,.jpg,.jpeg">
+        </div>
+        <div id="file-name"></div>
+      </div>
+
+      <div id="text-panel" class="hidden">
+        <textarea id="text-input" placeholder="Paste your agreement text here (English, Hindi, or mixed)..."></textarea>
+      </div>
+
+      <button class="primary" id="analyze-btn" disabled>Analyze Document</button>
+
+      <div id="error-container"></div>
+    </div>
+
+    <div id="loading" class="card hidden">
+      <div class="spinner"></div>
+      <p>Analyzing clauses... this can take a moment.</p>
+    </div>
+
+    <div id="results" class="hidden"></div>
+
+  </div>
+
+  <div id="history-view" class="hidden">
+    <div class="card">
+      <h3 style="margin-top:0;">Past Analyses</h3>
+      <div id="history-list"></div>
+    </div>
+    <div id="history-detail" class="hidden"></div>
+  </div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

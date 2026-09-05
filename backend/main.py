@@ -180,4 +180,4 @@ def get_history_detail(record_id: str):
 
 
 # Serve the frontend (index.html, css, js) — must be mounted LAST
-app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
