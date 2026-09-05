@@ -14,60 +14,87 @@
 
 <div class="container">
 
-  <div class="top-tabs">
-    <button class="top-tab-btn active" id="view-analyze">Analyze Document</button>
-    <button class="top-tab-btn" id="view-history">History</button>
-  </div>
-
-  <div id="analyze-view">
-
-    <div class="card" id="upload-card">
+  <!-- AUTH VIEW (shown when not logged in) -->
+  <div id="auth-view">
+    <div class="card" id="auth-card">
       <div class="tabs">
-        <button class="tab-btn active" id="tab-file">Upload File</button>
-        <button class="tab-btn" id="tab-text">Paste Text</button>
+        <button class="tab-btn active" id="tab-login">Log In</button>
+        <button class="tab-btn" id="tab-signup">Sign Up</button>
       </div>
 
-      <div class="lang-row">
-        <label for="lang-select">🌐 Explanation language:</label>
-        <select id="lang-select">
-          <option value="English" selected>English</option>
-          <option value="Hindi">हिंदी (Hindi)</option>
-        </select>
-        <span style="font-size:12px;">— works no matter what language your document is in</span>
+      <div id="login-panel">
+        <input type="text" id="login-username" placeholder="Username" class="auth-input">
+        <input type="password" id="login-password" placeholder="Password" class="auth-input">
+        <button class="primary" id="login-btn">Log In</button>
       </div>
 
-      <div id="file-panel">
-        <div id="drop-zone">
-          <p><strong>Click to upload</strong> or drag & drop a PDF / TXT / Image file here</p>
-          <input type="file" id="file-input" accept=".pdf,.txt,.png,.jpg,.jpeg">
-        </div>
-        <div id="file-name"></div>
+      <div id="signup-panel" class="hidden">
+        <input type="text" id="signup-username" placeholder="Username" class="auth-input">
+        <input type="email" id="signup-email" placeholder="Email" class="auth-input">
+        <input type="password" id="signup-password" placeholder="Password" class="auth-input">
+        <button class="primary" id="signup-btn">Sign Up</button>
       </div>
 
-      <div id="text-panel" class="hidden">
-        <textarea id="text-input" placeholder="Paste your agreement text here (English, Hindi, or mixed)..."></textarea>
-      </div>
-
-      <button class="primary" id="analyze-btn" disabled>Analyze Document</button>
-
-      <div id="error-container"></div>
+      <div id="auth-error"></div>
     </div>
-
-    <div id="loading" class="card hidden">
-      <div class="spinner"></div>
-      <p>Analyzing clauses... this can take a moment.</p>
-    </div>
-
-    <div id="results" class="hidden"></div>
-
   </div>
 
-  <div id="history-view" class="hidden">
-    <div class="card">
-      <h3 style="margin-top:0;">Past Analyses</h3>
-      <div id="history-list"></div>
+  <!-- MAIN APP VIEW (shown after login) -->
+  <div id="app-view" class="hidden">
+    <div class="top-tabs">
+      <button class="top-tab-btn active" id="view-analyze">Analyze Document</button>
+      <button class="top-tab-btn" id="view-history">History</button>
+      <span id="welcome-user" class="welcome-user"></span>
+      <button class="logout-btn" id="logout-btn">Log Out</button>
     </div>
-    <div id="history-detail" class="hidden"></div>
+
+    <div id="analyze-view">
+
+      <div class="card" id="upload-card">
+        <div class="tabs">
+          <button class="tab-btn active" id="tab-file">Upload File</button>
+          <button class="tab-btn" id="tab-text">Paste Text</button>
+        </div>
+
+        <div class="lang-row">
+          <label for="lang-select">🌐 Explanation language:</label>
+          <select id="lang-select">
+            <option value="English" selected>English</option>
+            <option value="Hindi">हिंदी (Hindi)</option>
+          </select>
+        </div>
+
+        <div id="file-panel">
+          <div id="drop-zone">
+            <p><strong>Click to upload</strong> or drag & drop a PDF / TXT / Image file here</p>
+            <input type="file" id="file-input" accept=".pdf,.txt,.png,.jpg,.jpeg">
+          </div>
+          <div id="file-name"></div>
+        </div>
+
+        <div id="text-panel" class="hidden">
+          <textarea id="text-input" placeholder="Paste your agreement text here..."></textarea>
+        </div>
+
+        <button class="primary" id="analyze-btn" disabled>Analyze Document</button>
+        <div id="error-container"></div>
+      </div>
+
+      <div id="loading" class="card hidden">
+        <div class="spinner"></div>
+        <p>Analyzing clauses... this can take a moment.</p>
+      </div>
+
+      <div id="results" class="hidden"></div>
+    </div>
+
+    <div id="history-view" class="hidden">
+      <div class="card">
+        <h3 style="margin-top:0;">Past Analyses</h3>
+        <div id="history-list"></div>
+      </div>
+      <div id="history-detail" class="hidden"></div>
+    </div>
   </div>
 
 </div>

@@ -84,6 +84,9 @@ header p { margin: 4px 0 0; color: #cbd5e1; font-size: 14px; }
   border-color: #1e293b;
   background: #f1f5f9;
 }
+#drop-zone p {
+  font-size: 15px;
+}
 #file-input { display: none; }
 
 textarea {
@@ -92,7 +95,7 @@ textarea {
   padding: 12px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 15px;
   font-family: inherit;
   resize: vertical;
 }
@@ -200,13 +203,15 @@ button.primary:disabled { background: #94a3b8; cursor: not-allowed; }
 .clause-tag.green { background: var(--green); }
 
 .clause-text {
-  font-size: 14px;
-  color: #374151;
-  margin-bottom: 8px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #1f2937;
+  margin-bottom: 10px;
   white-space: pre-wrap;
 }
 .clause-explanation {
-  font-size: 14px;
+  font-size: 14.5px;
+  line-height: 1.5;
   color: var(--text);
   background: white;
   padding: 10px 12px;
@@ -225,11 +230,32 @@ button.primary:disabled { background: #94a3b8; cursor: not-allowed; }
   border: 1px solid #1e293b;
 }
 
+#auth-view {
+  max-width: 420px;
+  margin: 60px auto;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+#auth-error {
+  margin-top: 8px;
+}
+
 .top-tabs {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 20px;
 }
+
 .top-tab-btn {
   padding: 10px 20px;
   border: none;
@@ -245,6 +271,26 @@ button.primary:disabled { background: #94a3b8; cursor: not-allowed; }
   color: white;
 }
 
+.welcome-user {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.logout-btn {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #991b1b;
+}
+.logout-btn:hover {
+  background: #fef2f2;
+}
+
 .history-item {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -256,18 +302,10 @@ button.primary:disabled { background: #94a3b8; cursor: not-allowed; }
   cursor: pointer;
   transition: background 0.15s;
 }
-.history-item:hover {
-  background: #f8fafc;
-}
-.history-item .hi-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-.history-item .hi-meta {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-}
+.history-item:hover { background: #f8fafc; }
+.history-item .hi-name { font-weight: 600; font-size: 14px; }
+.history-item .hi-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
 .history-badge {
   font-size: 12px;
   font-weight: 700;
@@ -293,4 +331,25 @@ button.primary:disabled { background: #94a3b8; cursor: not-allowed; }
   text-align: center;
   color: var(--muted);
   padding: 32px;
+}
+
+.overall-summary {
+  margin-top: 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: #1e3a5f;
+  line-height: 1.5;
+}
+
+.clause-suggestion {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #166534;
+  background: #f0fdf4;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #bbf7d0;
 }

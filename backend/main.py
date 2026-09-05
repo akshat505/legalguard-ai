@@ -6,12 +6,13 @@ Run with: uvicorn main:app --reload --port 8000
 import io
 import os
 import uuid
+import platform
 from datetime import datetime, timezone
 
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -19,18 +20,19 @@ from pymongo import MongoClient, DESCENDING
 from dotenv import load_dotenv
 
 from analyzer import analyze_document, llm_available
+from auth import create_user, authenticate_user, create_session, get_current_user
 
 load_dotenv()
 
-# ---- Tesseract path (Windows) ----
-import platform
 if platform.system() == "Windows":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-# ---- MongoDB setup (cloud Atlas or local fallback) ----
+
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
-mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=15000)
 db = mongo_client["legalguard_ai"]
 history_collection = db["analysis_history"]
+users_collection = db["users"]
+sessions_collection = db["sessions"]
 
 
 def mongo_available() -> bool:
@@ -51,10 +53,58 @@ app.add_middleware(
 )
 
 
+def current_user_id(authorization: str = Header(None)) -> str:
+    return get_current_user(sessions_collection, authorization)
+
+
+# ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
+
+class SignupPayload(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class LoginPayload(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/signup")
+def signup(payload: SignupPayload):
+    try:
+        user = create_user(users_collection, payload.username, payload.email, payload.password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    token = create_session(sessions_collection, user["user_id"])
+    return {"token": token, "username": user["username"]}
+
+
+@app.post("/api/login")
+def login(payload: LoginPayload):
+    try:
+        user = authenticate_user(users_collection, payload.username, payload.password)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    token = create_session(sessions_collection, user["user_id"])
+    return {"token": token, "username": user["username"]}
+
+
+@app.get("/api/me")
+def get_me(user_id: str = Depends(current_user_id)):
+    user = users_collection.find_one({"_id": user_id}, {"password_hash": 0})
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Document processing helpers
+# ---------------------------------------------------------------------------
+
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     all_text = []
-
     for page in doc:
         page_text = page.get_text().strip()
         if len(page_text) > 20:
@@ -65,7 +115,6 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
             img = Image.open(io.BytesIO(img_bytes))
             ocr_text = pytesseract.image_to_string(img, lang="eng+hin")
             all_text.append(ocr_text)
-
     doc.close()
     return "\n".join(all_text)
 
@@ -75,11 +124,12 @@ def extract_text_from_image(file_bytes: bytes) -> str:
     return pytesseract.image_to_string(img, lang="eng+hin")
 
 
-def save_to_history(source_name: str, result: dict) -> str:
+def save_to_history(user_id: str, source_name: str, result: dict) -> str:
     if not mongo_available():
         return ""
     record = {
         "_id": str(uuid.uuid4()),
+        "user_id": user_id,
         "source_name": source_name,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "risk_score": result["risk_score"],
@@ -95,16 +145,15 @@ def save_to_history(source_name: str, result: dict) -> str:
 
 @app.get("/api/health")
 def health():
-    return {
-        "status": "ok",
-        "llm_available": llm_available(),
-        "mongo_available": mongo_available(),
-        "mongo_uri_preview": MONGO_URI[:40] if MONGO_URI else "NOT SET",
-    }
+    return {"status": "ok", "llm_available": llm_available(), "mongo_available": mongo_available()}
 
 
 @app.post("/api/analyze")
-async def analyze(file: UploadFile = File(...), output_language: str = Form("English")):
+async def analyze(
+    file: UploadFile = File(...),
+    output_language: str = Form("English"),
+    user_id: str = Depends(current_user_id),
+):
     filename = file.filename or "uploaded_document"
     content = await file.read()
     lower_name = filename.lower()
@@ -122,17 +171,14 @@ async def analyze(file: UploadFile = File(...), output_language: str = Form("Eng
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Could not read image: {e}")
     else:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file type. Upload a .pdf, .txt, or image (.png/.jpg) file.",
-        )
+        raise HTTPException(status_code=400, detail="Unsupported file type. Upload a .pdf, .txt, or image (.png/.jpg) file.")
 
     text = text.strip()
     if not text or len(text) < 50:
         raise HTTPException(status_code=400, detail="No readable text found in the document.")
 
     result = analyze_document(text, output_language=output_language)
-    history_id = save_to_history(filename, result)
+    history_id = save_to_history(user_id, filename, result)
     result["history_id"] = history_id
     return result
 
@@ -143,37 +189,34 @@ class TextPayload(BaseModel):
 
 
 @app.post("/api/analyze-text")
-async def analyze_text(payload: TextPayload):
+async def analyze_text(payload: TextPayload, user_id: str = Depends(current_user_id)):
     text = payload.text.strip()
     if not text or len(text) < 50:
         raise HTTPException(status_code=400, detail="Please provide at least a few sentences of agreement text.")
 
     result = analyze_document(text, output_language=payload.output_language)
-    history_id = save_to_history("Pasted Text", result)
+    history_id = save_to_history(user_id, "Pasted Text", result)
     result["history_id"] = history_id
     return result
 
 
 @app.get("/api/history")
-def get_history():
+def get_history(user_id: str = Depends(current_user_id)):
     if not mongo_available():
         return {"available": False, "records": []}
 
     records = list(
-        history_collection.find(
-            {},
-            {"clauses": 0},
-        ).sort("timestamp", DESCENDING).limit(50)
+        history_collection.find({"user_id": user_id}, {"clauses": 0}).sort("timestamp", DESCENDING).limit(50)
     )
     return {"available": True, "records": records}
 
 
 @app.get("/api/history/{record_id}")
-def get_history_detail(record_id: str):
+def get_history_detail(record_id: str, user_id: str = Depends(current_user_id)):
     if not mongo_available():
         raise HTTPException(status_code=503, detail="Database not available.")
 
-    record = history_collection.find_one({"_id": record_id})
+    record = history_collection.find_one({"_id": record_id, "user_id": user_id})
     if not record:
         raise HTTPException(status_code=404, detail="Record not found.")
     return record
