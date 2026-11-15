@@ -264,6 +264,14 @@ function renderResults(data) {
   }
 }
 
+const SEVERITY_RANK = { green: 0, yellow: 1, red: 2 };
+
+// True when the AI rated a clause as MORE risky than the keyword rules did.
+function caughtByAi(c) {
+  return c.ai_severity && c.rule_severity &&
+    SEVERITY_RANK[c.ai_severity] > SEVERITY_RANK[c.rule_severity];
+}
+
 function buildReportHtml(data, llmNote, showBackLink) {
   let clausesHtml = "";
   data.clauses.forEach((c) => {
@@ -273,19 +281,43 @@ function buildReportHtml(data, llmNote, showBackLink) {
     const suggestionHtml = c.suggestion
       ? `<div class="clause-suggestion">🤝 <strong>Suggestion:</strong> ${escapeHtml(c.suggestion)}</div>`
       : "";
+    const aiBadgeHtml = caughtByAi(c) ? `<span class="ai-badge">🤖 Caught by AI</span>` : "";
+    const verdictHtml = c.rule_severity
+      ? `<div class="verdicts">
+           <span>🔍 Keyword rules: <span class="mini-tag ${c.rule_severity}">${c.rule_severity}</span></span>
+           <span>🤖 AI: ${c.ai_severity
+             ? `<span class="mini-tag ${c.ai_severity}">${c.ai_severity}</span>`
+             : `<span class="mini-tag off">not available</span>`}</span>
+         </div>`
+      : "";
     clausesHtml += `
       <div class="clause ${c.severity}">
         <div class="clause-top">
           <strong>Clause ${c.clause_number}</strong>
-          <span class="clause-tag ${c.severity}">${c.severity}</span>
+          <span class="tags">${aiBadgeHtml}<span class="clause-tag ${c.severity}">${c.severity}</span></span>
         </div>
         <div class="clause-text">${escapeHtml(c.text)}</div>
         <div class="clause-explanation">💡 ${escapeHtml(c.explanation)}</div>
         ${suggestionHtml}
+        ${verdictHtml}
         ${flagsHtml}
       </div>
     `;
   });
+
+  // Summary of what the AI did across the whole document
+  let aiBoxHtml = "";
+  const aiChecked = data.clauses.filter((c) => c.ai_severity).length;
+  if (aiChecked) {
+    const aiCaught = data.clauses.filter(caughtByAi).length;
+    aiBoxHtml = `
+      <div class="ai-box">
+        🤖 <strong>AI checked ${aiChecked} of ${data.clauses.length} clauses.</strong>
+        ${aiCaught
+          ? `It found <strong>${aiCaught} risky clause${aiCaught > 1 ? "s" : ""}</strong> that the keyword rules missed (marked "Caught by AI" below).`
+          : "It did not find any extra risk beyond the keyword rules."}
+      </div>`;
+  }
 
   const backLinkHtml = showBackLink ? `<div class="back-link" id="back-to-history">← Back to history</div>` : "";
   const docTypeHtml = data.document_type ? `<span>Document type: <strong>${escapeHtml(data.document_type)}</strong></span>` : "";
@@ -308,6 +340,7 @@ function buildReportHtml(data, llmNote, showBackLink) {
         <span>Explanation language: <strong>${data.output_language}</strong></span>
       </div>
       ${summaryHtml}
+      ${aiBoxHtml}
     </div>
     <div class="card">
       <h3 style="margin-top:0;">Clause-by-Clause Breakdown</h3>

@@ -7,18 +7,24 @@ then (optionally) asks Groq's cloud LLM API to explain + score each clause.
 import os
 import re
 import json
+from concurrent.futures import ThreadPoolExecutor
 from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-GROQ_MODEL = "llama-3.1-8b-instant"
+_groq_key = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=_groq_key) if _groq_key else None
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+LLM_PARALLEL_CALLS = 5  # how many clauses are sent to the AI at the same time
+
+SEVERITY_RANK = {"green": 0, "yellow": 1, "red": 2}
 
 
 def split_into_clauses(text: str) -> list[str]:
     text = text.replace("\r\n", "\n").strip()
 
-    pattern = r"(?=\n?\s*(?:\d{1,2}\.\d*\s|\(\d{1,2}\)\s|Section\s\d+|Clause\s\d+|Article\s\d+))"
+    # (?<!\d) stops "10." from being split into "1" + "0."
+    pattern = r"(?<!\d)(?=\n?\s*(?:\d{1,2}\.\d*\s|\(\d{1,2}\)\s|Section\s\d+|Clause\s\d+|Article\s\d+))"
     parts = re.split(pattern, text)
     parts = [p.strip() for p in parts if p.strip() and len(p.strip()) > 20]
 
@@ -138,25 +144,32 @@ def llm_available() -> bool:
     return groq_client is not None
 
 
-def _ollama_generate(prompt: str, timeout: int = 30) -> str:
+def _llm_generate(prompt: str, timeout: int = 30) -> str:
     response = groq_client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
+        timeout=timeout,
     )
     return response.choices[0].message.content.strip()
 
 
-def llm_analyze_clause(clause: str, output_language: str = "English", is_risky: bool = False) -> dict | None:
+def llm_analyze_clause(clause: str, output_language: str = "English") -> dict | None:
+    """Asks the AI to judge the clause's risk itself (red/yellow/green) and explain it."""
     language_instruction = (
-        "Write your response in Hindi (Devanagari script)."
+        "Write the summary and suggestion in Hindi (Devanagari script)."
         if output_language.lower().startswith("hi")
-        else "Write your response in English."
+        else "Write the summary and suggestion in English."
     )
 
-    if is_risky:
-        prompt = f"""You are a contract-review assistant helping someone who is about to sign an agreement.
+    prompt = f"""You are a contract-review assistant helping someone who is about to sign an agreement.
+Judge how risky this single clause is for the person signing it.
 The clause may be written in English, Hindi, or a mix of both.
+
+Risk levels:
+- "red": seriously unfair or dangerous for the signer (e.g. very short notice, one-sided termination, losing deposit, giving up legal rights, unlimited liability, heavy penalties)
+- "yellow": worth checking or negotiating, but not seriously harmful
+- "green": normal, fair, or purely informational
 
 Clause:
 \"\"\"{clause}\"\"\"
@@ -164,22 +177,10 @@ Clause:
 {language_instruction}
 
 Respond ONLY with valid JSON, no other text, in this exact format:
-{{"risk": "red" or "yellow" or "green", "summary": "one plain sentence explaining the clause and why it matters to the signer", "suggestion": "one short, practical sentence suggesting how the signer could ask to renegotiate or soften this clause"}}
-"""
-    else:
-        prompt = f"""You are a contract-review assistant. Analyze this single clause from an agreement.
-The clause may be written in English, Hindi, or a mix of both.
-
-Clause:
-\"\"\"{clause}\"\"\"
-
-{language_instruction}
-
-Respond ONLY with valid JSON, no other text, in this exact format:
-{{"risk": "red" or "yellow" or "green", "summary": "one plain sentence explaining the clause and why it matters to the signer"}}
+{{"risk": "red" or "yellow" or "green", "summary": "one plain sentence explaining the clause and why it matters to the signer", "suggestion": "if risk is red or yellow, one short practical sentence on how the signer could renegotiate or soften it; if green, an empty string"}}
 """
     try:
-        raw = _ollama_generate(prompt)
+        raw = _llm_generate(prompt)
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not match:
             return None
@@ -206,7 +207,7 @@ Document excerpt:
 
 {language_instruction} Respond with ONLY the document type name, nothing else."""
     try:
-        raw = _ollama_generate(prompt, timeout=20)
+        raw = _llm_generate(prompt, timeout=20)
         return raw.strip().strip('"').split("\n")[0][:60]
     except Exception:
         return None
@@ -231,7 +232,7 @@ Write a short 2-3 sentence plain-language summary of the overall risk in this do
 piece of practical advice. {language_instruction}
 Respond with ONLY the summary text, no labels or extra formatting."""
     try:
-        raw = _ollama_generate(prompt, timeout=25)
+        raw = _llm_generate(prompt, timeout=25)
         return raw.strip()
     except Exception:
         return None
@@ -256,24 +257,37 @@ def analyze_document(text: str, use_llm: bool = True, output_language: str = "En
     score_weights = {"red": 3, "yellow": 1, "green": 0}
     total_weight = 0
 
+    # The AI judges EVERY clause, several at the same time so it stays fast.
+    if llm_on and clauses:
+        with ThreadPoolExecutor(max_workers=LLM_PARALLEL_CALLS) as pool:
+            llm_results = list(pool.map(lambda c: llm_analyze_clause(c, output_language), clauses))
+    else:
+        llm_results = [None] * len(clauses)
+
     for i, clause in enumerate(clauses):
         rule_hits = rule_based_scan(clause)
 
         if any(h["severity"] == "red" for h in rule_hits):
-            severity = "red"
+            rule_severity = "red"
         elif any(h["severity"] == "yellow" for h in rule_hits):
-            severity = "yellow"
+            rule_severity = "yellow"
         else:
-            severity = "green"
+            rule_severity = "green"
 
-        is_risky = severity in ("red", "yellow")
-        llm_result = llm_analyze_clause(clause, output_language, is_risky=is_risky) if (llm_on and is_risky) else None
+        llm_result = llm_results[i]
+        ai_severity = llm_result["risk"] if llm_result else None
+
+        # Final risk = whichever (rules or AI) says it is MORE risky.
+        severity = rule_severity
+        if ai_severity and SEVERITY_RANK[ai_severity] > SEVERITY_RANK[rule_severity]:
+            severity = ai_severity
 
         explanation = None
         suggestion = None
         if llm_result:
             explanation = llm_result.get("summary")
-            suggestion = llm_result.get("suggestion")
+            if severity != "green":
+                suggestion = llm_result.get("suggestion") or None
         elif rule_hits:
             explanation = " ".join(h["explanation"] for h in rule_hits)
         else:
@@ -292,6 +306,8 @@ def analyze_document(text: str, use_llm: bool = True, output_language: str = "En
             "flags": [h["flag"] for h in rule_hits],
             "explanation": explanation,
             "suggestion": suggestion,
+            "rule_severity": rule_severity,
+            "ai_severity": ai_severity,
             "llm_used": llm_result is not None,
         })
 
