@@ -249,6 +249,7 @@ function renderResults(data) {
     : "AI reasoning was unavailable — showing rule-based analysis only.";
 
   resultsEl.innerHTML = buildReportHtml(data, llmNote);
+  attachPdfButton(resultsEl, data);
 
   const newBtn = document.getElementById("new-analysis-btn");
   if (newBtn) {
@@ -264,6 +265,14 @@ function renderResults(data) {
   }
 }
 
+const SEVERITY_RANK = { green: 0, yellow: 1, red: 2 };
+
+// True when the AI rated a clause as MORE risky than the keyword rules did.
+function caughtByAi(c) {
+  return c.ai_severity && c.rule_severity &&
+    SEVERITY_RANK[c.ai_severity] > SEVERITY_RANK[c.rule_severity];
+}
+
 function buildReportHtml(data, llmNote, showBackLink) {
   let clausesHtml = "";
   data.clauses.forEach((c) => {
@@ -273,19 +282,42 @@ function buildReportHtml(data, llmNote, showBackLink) {
     const suggestionHtml = c.suggestion
       ? `<div class="clause-suggestion">🤝 <strong>Suggestion:</strong> ${escapeHtml(c.suggestion)}</div>`
       : "";
+    const aiBadgeHtml = caughtByAi(c) ? `<span class="ai-badge">🤖 Caught by AI</span>` : "";
+    const verdictHtml = c.rule_severity
+      ? `<div class="verdicts">
+           <span>🤖 AI: ${c.ai_severity
+             ? `<span class="mini-tag ${c.ai_severity}">${c.ai_severity}</span>`
+             : `<span class="mini-tag off">not available</span>`}</span>
+         </div>`
+      : "";
     clausesHtml += `
       <div class="clause ${c.severity}">
         <div class="clause-top">
           <strong>Clause ${c.clause_number}</strong>
-          <span class="clause-tag ${c.severity}">${c.severity}</span>
+          <span class="tags">${aiBadgeHtml}<span class="clause-tag ${c.severity}">${c.severity}</span></span>
         </div>
         <div class="clause-text">${escapeHtml(c.text)}</div>
         <div class="clause-explanation">💡 ${escapeHtml(c.explanation)}</div>
         ${suggestionHtml}
+        ${verdictHtml}
         ${flagsHtml}
       </div>
     `;
   });
+
+  // Summary of what the AI did across the whole document
+  let aiBoxHtml = "";
+  const aiChecked = data.clauses.filter((c) => c.ai_severity).length;
+  if (aiChecked) {
+    const aiCaught = data.clauses.filter(caughtByAi).length;
+    aiBoxHtml = `
+      <div class="ai-box">
+        🤖 <strong>AI checked ${aiChecked} of ${data.clauses.length} clauses.</strong>
+        ${aiCaught
+          ? `It found <strong>${aiCaught} risky clause${aiCaught > 1 ? "s" : ""}</strong> that the keyword rules missed (marked "Caught by AI" below).`
+          : "It did not find any extra risk beyond the keyword rules."}
+      </div>`;
+  }
 
   const backLinkHtml = showBackLink ? `<div class="back-link" id="back-to-history">← Back to history</div>` : "";
   const docTypeHtml = data.document_type ? `<span>Document type: <strong>${escapeHtml(data.document_type)}</strong></span>` : "";
@@ -293,6 +325,7 @@ function buildReportHtml(data, llmNote, showBackLink) {
 
   return `
     ${backLinkHtml}
+    <div class="report-body">
     <div class="card">
       <div class="score-header">
         <div>
@@ -308,13 +341,66 @@ function buildReportHtml(data, llmNote, showBackLink) {
         <span>Explanation language: <strong>${data.output_language}</strong></span>
       </div>
       ${summaryHtml}
+      ${aiBoxHtml}
     </div>
     <div class="card">
       <h3 style="margin-top:0;">Clause-by-Clause Breakdown</h3>
       ${clausesHtml}
     </div>
-    ${showBackLink ? "" : `<button class="primary" id="new-analysis-btn">Analyze Another Document</button>`}
+    </div>
+    <div class="report-actions">
+      <button class="primary pdf-btn">📄 Download PDF</button>
+      ${showBackLink ? "" : `<button class="primary" id="new-analysis-btn">Analyze Another Document</button>`}
+    </div>
   `;
+}
+
+// ---------- Download report as PDF ----------
+// Builds the PDF from a copy of the report, with a small title on top.
+function makePdf(container, data) {
+  const report = container.querySelector(".report-body").cloneNode(true);
+  report.classList.add("pdf-page");
+  const header = document.createElement("div");
+  header.className = "pdf-header";
+  const fileLine = data.source_name ? escapeHtml(data.source_name) + " &middot; " : "";
+  header.innerHTML = `
+    <h1>⚖️ LegalGuard AI – Risk Report</h1>
+    <p>${fileLine}Generated on ${new Date().toLocaleString()}</p>`;
+  report.prepend(header);
+
+  return html2pdf()
+    .set({
+      margin: 10,
+      filename: "LegalGuard-Report.pdf",
+      image: { type: "jpeg", quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["css", "legacy"], avoid: [".clause", ".score-header", ".pdf-header"] },
+    })
+    .from(report);
+}
+
+function attachPdfButton(container, data) {
+  const btn = container.querySelector(".pdf-btn");
+  if (!btn) return;
+
+  btn.onclick = async () => {
+    if (typeof html2pdf === "undefined") {
+      alert("PDF tool could not load. Please check your internet and refresh the page.");
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Preparing PDF...";
+
+    try {
+      await makePdf(container, data).save();
+    } catch (err) {
+      alert("Could not create the PDF: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "📄 Download PDF";
+    }
+  };
 }
 
 function escapeHtml(str) {
@@ -376,6 +462,7 @@ async function loadHistoryDetail(id) {
     if (!res.ok) throw new Error(data.detail || "Could not load this record.");
 
     historyDetailEl.innerHTML = buildReportHtml(data, null, true);
+    attachPdfButton(historyDetailEl, data);
     document.getElementById("back-to-history").onclick = () => {
       historyDetailEl.classList.add("hidden");
     };
