@@ -284,7 +284,6 @@ function buildReportHtml(data, llmNote, showBackLink) {
     const aiBadgeHtml = caughtByAi(c) ? `<span class="ai-badge">🤖 Caught by AI</span>` : "";
     const verdictHtml = c.rule_severity
       ? `<div class="verdicts">
-           <span>🔍 Keyword rules: <span class="mini-tag ${c.rule_severity}">${c.rule_severity}</span></span>
            <span>🤖 AI: ${c.ai_severity
              ? `<span class="mini-tag ${c.ai_severity}">${c.ai_severity}</span>`
              : `<span class="mini-tag off">not available</span>`}</span>
