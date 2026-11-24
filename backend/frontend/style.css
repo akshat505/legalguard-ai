@@ -274,6 +274,42 @@ button.primary:disabled { background: #94a3b8; cursor: not-allowed; }
   border: 1px solid #1e293b;
 }
 
+.report-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pdf-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+/* Layout used only inside the downloaded PDF (fits A4 width) */
+.pdf-page {
+  width: 720px;
+  padding: 4px;
+  box-sizing: border-box;
+}
+.pdf-page .card {
+  box-shadow: none;
+  border: 1px solid #e2e8f0;
+}
+/* Title shown only inside the downloaded PDF */
+.pdf-header {
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #1e293b;
+}
+.pdf-header h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+.pdf-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 #auth-view {
   max-width: 420px;
   margin: 60px auto;

@@ -249,6 +249,7 @@ function renderResults(data) {
     : "AI reasoning was unavailable — showing rule-based analysis only.";
 
   resultsEl.innerHTML = buildReportHtml(data, llmNote);
+  attachPdfButton(resultsEl, data);
 
   const newBtn = document.getElementById("new-analysis-btn");
   if (newBtn) {
@@ -324,6 +325,7 @@ function buildReportHtml(data, llmNote, showBackLink) {
 
   return `
     ${backLinkHtml}
+    <div class="report-body">
     <div class="card">
       <div class="score-header">
         <div>
@@ -345,8 +347,60 @@ function buildReportHtml(data, llmNote, showBackLink) {
       <h3 style="margin-top:0;">Clause-by-Clause Breakdown</h3>
       ${clausesHtml}
     </div>
-    ${showBackLink ? "" : `<button class="primary" id="new-analysis-btn">Analyze Another Document</button>`}
+    </div>
+    <div class="report-actions">
+      <button class="primary pdf-btn">📄 Download PDF</button>
+      ${showBackLink ? "" : `<button class="primary" id="new-analysis-btn">Analyze Another Document</button>`}
+    </div>
   `;
+}
+
+// ---------- Download report as PDF ----------
+// Builds the PDF from a copy of the report, with a small title on top.
+function makePdf(container, data) {
+  const report = container.querySelector(".report-body").cloneNode(true);
+  report.classList.add("pdf-page");
+  const header = document.createElement("div");
+  header.className = "pdf-header";
+  const fileLine = data.source_name ? escapeHtml(data.source_name) + " &middot; " : "";
+  header.innerHTML = `
+    <h1>⚖️ LegalGuard AI – Risk Report</h1>
+    <p>${fileLine}Generated on ${new Date().toLocaleString()}</p>`;
+  report.prepend(header);
+
+  return html2pdf()
+    .set({
+      margin: 10,
+      filename: "LegalGuard-Report.pdf",
+      image: { type: "jpeg", quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["css", "legacy"], avoid: [".clause", ".score-header", ".pdf-header"] },
+    })
+    .from(report);
+}
+
+function attachPdfButton(container, data) {
+  const btn = container.querySelector(".pdf-btn");
+  if (!btn) return;
+
+  btn.onclick = async () => {
+    if (typeof html2pdf === "undefined") {
+      alert("PDF tool could not load. Please check your internet and refresh the page.");
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Preparing PDF...";
+
+    try {
+      await makePdf(container, data).save();
+    } catch (err) {
+      alert("Could not create the PDF: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "📄 Download PDF";
+    }
+  };
 }
 
 function escapeHtml(str) {
@@ -408,6 +462,7 @@ async function loadHistoryDetail(id) {
     if (!res.ok) throw new Error(data.detail || "Could not load this record.");
 
     historyDetailEl.innerHTML = buildReportHtml(data, null, true);
+    attachPdfButton(historyDetailEl, data);
     document.getElementById("back-to-history").onclick = () => {
       historyDetailEl.classList.add("hidden");
     };
