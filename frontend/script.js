@@ -373,7 +373,7 @@ function makePdf(container, data) {
       margin: 10,
       filename: "LegalGuard-Report.pdf",
       image: { type: "jpeg", quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 }, // page is scrolled when the button is clicked
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       pagebreak: { mode: ["css", "legacy"], avoid: [".clause", ".score-header", ".pdf-header"] },
     })
